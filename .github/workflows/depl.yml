@@ -1,0 +1,97 @@
+name: Build and Publish Docker Image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to Dockerhub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Create .env file
+        run: echo "${{secrets.ENV_PRODUCTION}}" | base64 -d > .env
+
+      - name: Build and tag Docker image
+        run: docker build -t ${{secrets.DOCKER_HUB_USERNAME}}/fe-portfolio:latest .
+
+      - name: Push Docker image to Dockerhub
+        run: docker push ${{secrets.DOCKER_HUB_USERNAME}}/fe-portfolio:latest
+
+      - name: Update image metadata
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{secrets.DOCKER_HUB_USERNAME}}/fe-portfolio:latest
+          tags: |
+            ${{github.sha}}
+
+  deployment:
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Tạo thư mục app nếu chưa tồn tại
+            mkdir -p ~/fe-portfolio
+
+            # Di chuyển vào thư mục ứng dụng
+            cd ~/fe-portfolio
+
+            # Kiểm tra nếu file docker-compose.yml không tồn tại, tạo file mới
+            if [ ! -f docker-compose.yml ]; then
+              cat > docker-compose.yml << 'EOL'
+            version: '3.8'
+
+            services:
+              be-portfolio:
+                image: ${{ secrets.DOCKER_HUB_USERNAME }}/be-portfolio:latest
+                ports:
+                  - "3000:3000"
+                restart: always
+                env_file:
+                  - .env
+            EOL
+            fi
+
+            # Tạo backup file .env nếu đã tồn tại
+            if [ -f .env ]; then
+              cp .env .env.backup.$(date +%Y%m%d%H%M%S)
+            fi
+
+            # Tạo file .env từ secret
+            echo "${{secrets.ENV_PRODUCTION}}" | base64 -d > .env
+
+            # Dừng container hiện tại nếu có
+            docker-compose down || true
+
+            # Pull image mới nhất
+            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/fe-portfolio:latest
+
+            # Khởi động lại ứng dụng
+            docker-compose up -d
+
+            # Hiển thị logs
+            docker-compose logs --tail=20 fe-portfolio
+
+            # Hiển thị container status
+            docker ps -a | grep fe-portfolio
