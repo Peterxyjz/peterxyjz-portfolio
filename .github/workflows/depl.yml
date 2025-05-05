@@ -63,8 +63,8 @@ jobs:
             version: '3.8'
 
             services:
-              be-portfolio:
-                image: ${{ secrets.DOCKER_HUB_USERNAME }}/be-portfolio:latest
+              fe-portfolio:
+                image: ${{ secrets.DOCKER_HUB_USERNAME }}/fe-portfolio:latest
                 ports:
                   - "3000:3000"
                 restart: always
