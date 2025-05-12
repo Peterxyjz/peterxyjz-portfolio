@@ -1,5 +1,5 @@
 const config = {
-  '*.ts': ['pnpm lint', 'pnpm format']
+  'src/**/*.{ts,tsx}': ['pnpm lint', 'pnpm format']
 }
 
 export default config

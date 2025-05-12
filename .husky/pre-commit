@@ -12,5 +12,6 @@ if ! echo "$BRANCH" | grep -qE "$REGEX"; then
   exit 1
 fi
 
+echo "Skipping lint-staged and build for now"
 pnpm lint-staged
 pnpm build
